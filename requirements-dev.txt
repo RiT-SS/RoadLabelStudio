@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest==9.1.1
+# Optional synthetic UI demo and documentation screenshots
+Pillow==11.0.0

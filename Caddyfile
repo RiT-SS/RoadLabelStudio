@@ -1,0 +1,7 @@
+{$STUDIO_DOMAIN} {
+    encode zstd gzip
+    request_body {
+        max_size 1100MB
+    }
+    reverse_proxy studio:8780
+}

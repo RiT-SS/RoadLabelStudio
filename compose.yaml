@@ -1,0 +1,40 @@
+services:
+  studio:
+    build: .
+    restart: unless-stopped
+    env_file: ${STUDIO_ENV_FILE:-.env}
+    environment:
+      STUDIO_ENV: production
+      STUDIO_DATA_DIR: /app/data
+    volumes:
+      - studio_data:/app/data
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    expose:
+      - "8780"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8780/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      studio:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      STUDIO_DOMAIN: ${STUDIO_DOMAIN:?Set STUDIO_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  studio_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,8 @@
+# Optional: install in the SAME Python environment as the website for auto-management.
+# Select a PyTorch CUDA build compatible with your server before installing this file.
+-r requirements.txt
+torch==2.7.0
+torchvision==0.22.0
+transformers==4.57.6
+accelerate==1.15.0
+Pillow==11.0.0

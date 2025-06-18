@@ -1,0 +1,140 @@
+{
+  "dataset": "RoadSens-4M",
+  "source_url": "https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3",
+  "doi": "10.6084/m9.figshare.30341143.v3",
+  "source_license": "CC BY 4.0",
+  "source_license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "annotation_origin": "RoadLabel project v4 direct visual observations, not author-provided frame labels or fresh Qwen inference",
+  "scores_are_calibrated_probabilities": false,
+  "transform_description": "Original frame index selection; clockwise 90-degree rotation; existing upright ROI [0,1920,2160,1228]; scale to 1536x874; road-only crop listed per example. No generative changes. Scores retain original v4 review-view judgments, not re-inference on the published crop.",
+  "examples": [
+    {
+      "id": "cracks",
+      "source_session": "S006",
+      "frame_index": 113,
+      "time_s": 3.765622,
+      "image": "images/real/cracks.jpg",
+      "annotation_kind": "v4_observed",
+      "annotation_status": "draft_pending_human_review",
+      "scores": {
+        "crack": 0.95,
+        "pothole_depression": 0.0,
+        "surface_breakage": 0.7,
+        "irregular_repair": 0.0,
+        "water": 0.0,
+        "mud_loose_material": 0.0,
+        "foreign_object": 0.0,
+        "normal": 0.0,
+        "unclear_visibility": 0.0
+      },
+      "v4_note": "重新目视原始帧左側细网裂明确，正常侧边堆木不计。",
+      "display_crop_xywh": [
+        330,
+        340,
+        910,
+        390
+      ],
+      "review_view_size": [
+        1536,
+        874
+      ],
+      "image_sha256": "c19c878e63277be3ab881e8ae5bf3cf42e731d26c0480caa8861f2041d77d4b0"
+    },
+    {
+      "id": "breakage",
+      "source_session": "S060",
+      "frame_index": 215,
+      "time_s": 7.164889,
+      "image": "images/real/breakage.jpg",
+      "annotation_kind": "v4_observed",
+      "annotation_status": "draft_pending_human_review",
+      "scores": {
+        "crack": 0.85,
+        "pothole_depression": 0.95,
+        "surface_breakage": 0.99,
+        "irregular_repair": 0.0,
+        "water": 0.0,
+        "mud_loose_material": 0.9,
+        "foreign_object": 0.8,
+        "normal": 0.0,
+        "unclear_visibility": 0.0
+      },
+      "v4_note": "大面积铺装缺失、破碎边缘和散砂，同时有小包装异物",
+      "display_crop_xywh": [
+        470,
+        280,
+        960,
+        410
+      ],
+      "review_view_size": [
+        1536,
+        874
+      ],
+      "image_sha256": "4f9106d47a1b7663825bfcf4598ba8d7d4b031c7ac03ff7ce96da06e404b6235"
+    },
+    {
+      "id": "water",
+      "source_session": "S034",
+      "frame_index": 91,
+      "time_s": 3.032644,
+      "image": "images/real/water.jpg",
+      "annotation_kind": "v4_observed",
+      "annotation_status": "draft_pending_human_review",
+      "scores": {
+        "crack": 0.9,
+        "pothole_depression": 0.95,
+        "surface_breakage": 0.95,
+        "irregular_repair": 0.0,
+        "water": 0.95,
+        "mud_loose_material": 0.8,
+        "foreign_object": 0.8,
+        "normal": 0.0,
+        "unclear_visibility": 0.0
+      },
+      "v4_note": "",
+      "display_crop_xywh": [
+        740,
+        260,
+        760,
+        300
+      ],
+      "review_view_size": [
+        1536,
+        874
+      ],
+      "image_sha256": "9578c837023229496402a8c01b8c6bcb82d4a4e7bfaf27442f06f72a04d7ba56"
+    },
+    {
+      "id": "normal",
+      "source_session": "S059",
+      "frame_index": 163,
+      "time_s": 5.432022,
+      "image": "images/real/normal.jpg",
+      "annotation_kind": "v4_observed",
+      "annotation_status": "draft_pending_human_review",
+      "scores": {
+        "crack": 0.0,
+        "pothole_depression": 0.0,
+        "surface_breakage": 0.2,
+        "irregular_repair": 0.0,
+        "water": 0.0,
+        "mud_loose_material": 0.0,
+        "foreign_object": 0.3,
+        "normal": 0.9,
+        "unclear_visibility": 0.0
+      },
+      "v4_note": "主体铺装完整，阴影与标线不计",
+      "display_crop_xywh": [
+        330,
+        400,
+        1000,
+        320
+      ],
+      "review_view_size": [
+        1536,
+        874
+      ],
+      "image_sha256": "48d72df092f7adb866cae9a7fa7e6ffea82997377db043a1e8cea271524f7edf"
+    }
+  ]
+}

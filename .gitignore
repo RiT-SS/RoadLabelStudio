@@ -1,0 +1,38 @@
+# Local configuration, credentials, and runtime data
+.env
+.env.*
+!.env.example
+data/
+models/
+releases/
+*_config.json
+*.sqlite3*
+*.db
+*.log
+*.pem
+*.key
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+node_modules/
+package-lock.json
+
+# Media and model weights belong outside the source repository
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.avi
+*.safetensors
+*.pt
+*.pth
+.DS_Store
