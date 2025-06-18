@@ -64,8 +64,8 @@ RoadLabel Studio 将视频上传、视觉模型初标、人工复核和候选区
 
 | 裂缝 | 铺装破损 |
 | --- | --- |
-| ![真实路面细网裂](docs/images/real/cracks.jpg) | ![真实铺装缺损与散料](docs/images/real/breakage.jpg) |
-| 裂缝 **0.95** · 检查不规则网裂 | 剥落／破损 **0.99** · 检查缺损与破碎边缘 |
+| ![真实路面网状开裂](docs/images/real/cracks-net.jpg) | ![真实铺装缺损与散料](docs/images/real/breakage.jpg) |
+| 裂缝 **0.99** · 检查连续交织的网状裂纹 | 剥落／破损 **0.99** · 检查缺损与破碎边缘 |
 | **积水** | **正常对照** |
 | ![真实路面积水](docs/images/real/water.jpg) | ![正常路面上的标线与阴影](docs/images/real/normal.jpg) |
 | 积水 **0.95** · 检查水面及边缘 | 正常 **0.90** · 区分标线、阴影与病害 |

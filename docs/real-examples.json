@@ -10,16 +10,16 @@
   "examples": [
     {
       "id": "cracks",
-      "source_session": "S006",
-      "frame_index": 113,
-      "time_s": 3.765622,
-      "image": "images/real/cracks.jpg",
+      "source_session": "S095",
+      "frame_index": 790,
+      "time_s": 26.326556,
+      "image": "images/real/cracks-net.jpg",
       "annotation_kind": "v4_observed",
       "annotation_status": "draft_pending_human_review",
       "scores": {
-        "crack": 0.95,
-        "pothole_depression": 0.0,
-        "surface_breakage": 0.7,
+        "crack": 0.99,
+        "pothole_depression": 0.5,
+        "surface_breakage": 0.65,
         "irregular_repair": 0.0,
         "water": 0.0,
         "mud_loose_material": 0.0,
@@ -27,18 +27,18 @@
         "normal": 0.0,
         "unclear_visibility": 0.0
       },
-      "v4_note": "重新目视原始帧左側细网裂明确，正常侧边堆木不计。",
+      "v4_note": "路面开口网状裂缝清楚。",
       "display_crop_xywh": [
-        330,
-        340,
-        910,
-        390
+        400,
+        430,
+        680,
+        290
       ],
       "review_view_size": [
         1536,
         874
       ],
-      "image_sha256": "c19c878e63277be3ab881e8ae5bf3cf42e731d26c0480caa8861f2041d77d4b0"
+      "image_sha256": "10d17e4b4ffb3c82f335dc0f63aa738fed185b01820cbfa78791aae0c3fd7edf"
     },
     {
       "id": "breakage",

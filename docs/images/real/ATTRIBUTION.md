@@ -14,7 +14,7 @@ The images below are frames from the camera videos linked in the dataset's raw-d
 
 | File | Source session | Native frame (zero-based) | Time (seconds) | Final road crop (x, y, width, height) |
 | --- | --- | ---: | ---: | --- |
-| `cracks.jpg` | S006 | 113 | 3.765622 | 330, 340, 910, 390 |
+| `cracks-net.jpg` | S095 | 790 | 26.326556 | 400, 430, 680, 290 |
 | `breakage.jpg` | S060 | 215 | 7.164889 | 470, 280, 960, 410 |
 | `water.jpg` | S034 | 91 | 3.032644 | 740, 260, 760, 300 |
 | `normal.jpg` | S059 | 163 | 5.432022 | 330, 400, 1000, 320 |
