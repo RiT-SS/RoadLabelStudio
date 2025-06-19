@@ -74,17 +74,7 @@ RoadLabel Studio 将视频上传、视觉模型初标、人工复核和候选区
 
 ## 系统架构
 
-```mermaid
-flowchart LR
-    UI[浏览器工作台] --> API[FastAPI]
-    API --> Media[视频解码与帧定位]
-    API --> Store[(标注与复核记录)]
-    API --> Queue[任务队列]
-    Skills[分类 Skills] --> Queue
-    Queue --> Model[本地 Qwen / 视觉 API]
-    Model --> Store
-    Store --> Export[候选区间导出]
-```
+![系统架构：浏览器、API、视频处理、标注队列、视觉模型与候选导出](docs/images/architecture.svg)
 
 **技术栈：** FastAPI · SQLite · FFmpeg · 原生 JavaScript · Qwen2.5-VL
 

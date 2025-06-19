@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="530" viewBox="0 0 960 530" role="img" aria-labelledby="title desc">
+  <title id="title">RoadLabel Studio 系统架构</title>
+  <desc id="desc">浏览器通过 FastAPI 访问视频解码、任务队列与标注存储。分类 Skills 配置视觉模型分析策略，模型结果进入标注存储，经阈值筛选和相邻合并后导出候选区间。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#77958a"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="958" height="528" rx="20" fill="#f5f8f6" stroke="#e1e9e4"/>
+  <g fill="none" stroke="#77958a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)">
+    <path d="M480 100 V132"/>
+    <path d="M356 176 H176 V262"/>
+    <path d="M480 214 V262"/>
+    <path d="M604 176 H784 V262"/>
+    <path d="M300 296 H350"/>
+    <path d="M300 454 H328 V340 H350"/>
+    <path d="M480 356 V404"/>
+    <path d="M604 454 H632 V312 H654"/>
+    <path d="M784 356 V404"/>
+  </g>
+  <g stroke="#cfddd5" stroke-width="1.5" fill="#ffffff">
+    <rect x="356" y="24" width="248" height="76" rx="12" fill="#176b58" stroke="#176b58"/>
+    <rect x="356" y="138" width="248" height="76" rx="12" fill="#e5f2eb"/>
+    <rect x="52" y="268" width="248" height="88" rx="12"/>
+    <rect x="356" y="268" width="248" height="88" rx="12"/>
+    <rect x="660" y="268" width="248" height="88" rx="12"/>
+    <rect x="52" y="410" width="248" height="88" rx="12"/>
+    <rect x="356" y="410" width="248" height="88" rx="12"/>
+    <rect x="660" y="410" width="248" height="88" rx="12"/>
+  </g>
+  <g font-family="Arial, 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif" text-anchor="middle">
+    <g font-size="21" font-weight="700" fill="#183d32">
+      <text x="480" y="55" fill="#ffffff">浏览器工作台</text>
+      <text x="480" y="169">FastAPI</text>
+      <text x="176" y="303">视频解码与帧定位</text>
+      <text x="480" y="303">任务队列</text>
+      <text x="784" y="303">标注与复核记录</text>
+      <text x="176" y="445">分类 Skills</text>
+      <text x="480" y="445">视觉模型</text>
+      <text x="784" y="445">候选区间导出</text>
+    </g>
+    <g font-size="16" fill="#627a70">
+      <text x="480" y="81" fill="#d3e9df">上传 / 逐帧复核</text>
+      <text x="480" y="195">登录与任务接口</text>
+      <text x="176" y="331">FFmpeg / 原始时间戳</text>
+      <text x="480" y="331">调度 / 进度 / 版本</text>
+      <text x="784" y="331">SQLite / 修改留痕</text>
+      <text x="176" y="473">分类规则 / 策略版本</text>
+      <text x="480" y="473">本地 Qwen / 视觉 API</text>
+      <text x="784" y="473">阈值 / 合并 / JSON · CSV</text>
+    </g>
+  </g>
+</svg>

@@ -25,4 +25,4 @@ node scripts/render_docs.cjs
 
 截图写入 `docs/images/`。脚本先检查页面仅包含三个预设演示视频，随后记录视频库、复核、筛选、任务配置、Skills 和任务队列。它不提交任务，也不改动真实工作室。
 
-可通过 `PLAYWRIGHT_PACKAGE` 指定已安装的 Playwright 包，通过 `CHROMIUM_PATH` 指定 Chromium 可执行文件。首页流程图 `workflow.svg` 是项目内的矢量示意图，系统架构与模型生命周期图使用 GitHub 原生 Mermaid 渲染。
+可通过 `PLAYWRIGHT_PACKAGE` 指定已安装的 Playwright 包，通过 `CHROMIUM_PATH` 指定 Chromium 可执行文件。首页流程图 `workflow.svg` 和系统架构图 `architecture.svg` 使用 SVG，节点尺寸与换行由项目直接控制。
