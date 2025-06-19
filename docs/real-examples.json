@@ -1,44 +1,46 @@
 {
-  "dataset": "RoadSens-4M",
-  "source_url": "https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3",
-  "doi": "10.6084/m9.figshare.30341143.v3",
-  "source_license": "CC BY 4.0",
-  "source_license_url": "https://creativecommons.org/licenses/by/4.0/",
-  "annotation_origin": "RoadLabel project v4 direct visual observations, not author-provided frame labels or fresh Qwen inference",
+  "schema_version": 2,
+  "sources": {
+    "roadsens": {
+      "dataset": "RoadSens-4M",
+      "source_url": "https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3",
+      "doi": "10.6084/m9.figshare.30341143.v3",
+      "source_license": "CC BY 4.0",
+      "source_license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "annotation_origin": "RoadLabel project v4 direct visual observations, not author-provided frame labels or fresh Qwen inference",
+      "transform_description": "Original frame index selection; clockwise 90-degree rotation; existing upright ROI [0,1920,2160,1228]; scale to 1536x874; road-only crop listed per example. No generative changes. Scores retain original v4 review-view judgments, not re-inference on the published crop."
+    },
+    "road_cracks": {
+      "dataset": "Cracks and Potholes in Road Images v4",
+      "source_url": "https://data.mendeley.com/datasets/t576ydh9v8/4",
+      "doi": "10.17632/t576ydh9v8.4",
+      "source_license": "CC BY 4.0",
+      "source_license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "distribution": "Pothole Mix v2, cracks-and-potholes-in-road component",
+      "distribution_url": "https://data.mendeley.com/datasets/kfth5g2xk3/2"
+    }
+  },
   "scores_are_calibrated_probabilities": false,
-  "transform_description": "Original frame index selection; clockwise 90-degree rotation; existing upright ROI [0,1920,2160,1228]; scale to 1536x874; road-only crop listed per example. No generative changes. Scores retain original v4 review-view judgments, not re-inference on the published crop.",
   "examples": [
     {
       "id": "cracks",
-      "source_session": "S095",
-      "frame_index": 790,
-      "time_s": 26.326556,
-      "image": "images/real/cracks-net.jpg",
-      "annotation_kind": "v4_observed",
-      "annotation_status": "draft_pending_human_review",
-      "scores": {
-        "crack": 0.99,
-        "pothole_depression": 0.5,
-        "surface_breakage": 0.65,
-        "irregular_repair": 0.0,
-        "water": 0.0,
-        "mud_loose_material": 0.0,
-        "foreign_object": 0.0,
-        "normal": 0.0,
-        "unclear_visibility": 0.0
-      },
-      "v4_note": "路面开口网状裂缝清楚。",
+      "source_id": "road_cracks",
+      "source_image": "918387_RS_290_290RS294095_25385.jpg",
+      "image": "images/real/cracks-open.jpg",
+      "annotation_kind": "dataset_crack_segmentation_example",
+      "annotation_note": "The distributed dataset provides a crack mask for this still image. No model confidence is assigned to this display example.",
+      "scores": null,
+      "source_image_size": [
+        1024,
+        640
+      ],
       "display_crop_xywh": [
-        400,
-        430,
-        680,
-        290
+        360,
+        280,
+        560,
+        320
       ],
-      "review_view_size": [
-        1536,
-        874
-      ],
-      "image_sha256": "10d17e4b4ffb3c82f335dc0f63aa738fed185b01820cbfa78791aae0c3fd7edf"
+      "image_sha256": "0ecf1cf8efde215d9fd59d1c6a11abf13c38985f0dbf8ec904acfb30404ae276"
     },
     {
       "id": "breakage",
@@ -70,7 +72,8 @@
         1536,
         874
       ],
-      "image_sha256": "4f9106d47a1b7663825bfcf4598ba8d7d4b031c7ac03ff7ce96da06e404b6235"
+      "image_sha256": "4f9106d47a1b7663825bfcf4598ba8d7d4b031c7ac03ff7ce96da06e404b6235",
+      "source_id": "roadsens"
     },
     {
       "id": "water",
@@ -102,7 +105,8 @@
         1536,
         874
       ],
-      "image_sha256": "9578c837023229496402a8c01b8c6bcb82d4a4e7bfaf27442f06f72a04d7ba56"
+      "image_sha256": "9578c837023229496402a8c01b8c6bcb82d4a4e7bfaf27442f06f72a04d7ba56",
+      "source_id": "roadsens"
     },
     {
       "id": "normal",
@@ -134,7 +138,8 @@
         1536,
         874
       ],
-      "image_sha256": "48d72df092f7adb866cae9a7fa7e6ffea82997377db043a1e8cea271524f7edf"
+      "image_sha256": "48d72df092f7adb866cae9a7fa7e6ffea82997377db043a1e8cea271524f7edf",
+      "source_id": "roadsens"
     }
   ]
 }

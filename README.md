@@ -60,17 +60,17 @@ RoadLabel Studio 将视频上传、视觉模型初标、人工复核和候选区
 
 ## 真实道路样例
 
-以下为 RoadSens-4M 视频的路面裁切图，附项目初版观测分数，供人工复核；每类分数独立取值 `0–1`。
+真实道路裁切样例：裂缝选用带标注的公开道路图像，其余来自 RoadSens-4M 视频，附项目初版观测分数（各类独立取值 `0–1`）。
 
 | 裂缝 | 铺装破损 |
 | --- | --- |
-| ![真实路面网状开裂](docs/images/real/cracks-net.jpg) | ![真实铺装缺损与散料](docs/images/real/breakage.jpg) |
-| 裂缝 **0.99** · 检查连续交织的网状裂纹 | 剥落／破损 **0.99** · 检查缺损与破碎边缘 |
+| ![开口清楚的纵向路面裂缝](docs/images/real/cracks-open.jpg) | ![真实铺装缺损与散料](docs/images/real/breakage.jpg) |
+| 裂缝 · 观察纵向开口与分叉 | 剥落／破损 **0.99** · 检查缺损与破碎边缘 |
 | **积水** | **正常对照** |
 | ![真实路面积水](docs/images/real/water.jpg) | ![正常路面上的标线与阴影](docs/images/real/normal.jpg) |
 | 积水 **0.95** · 检查水面及边缘 | 正常 **0.90** · 区分标线、阴影与病害 |
 
-[查看标注流程与样例数据](docs/real-examples.md)。图片来源：Amith Khandakar 等人的 [RoadSens-4M Dataset](https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3)，许可 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。[署名与裁切说明](docs/images/real/ATTRIBUTION.md)。
+[查看标注流程与样例数据](docs/real-examples.md)。图片来源：[Cracks and Potholes in Road Images](https://data.mendeley.com/datasets/t576ydh9v8/4) 与 [RoadSens-4M](https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3)，许可 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。[署名与裁切说明](docs/images/real/ATTRIBUTION.md)。
 
 ## 系统架构
 

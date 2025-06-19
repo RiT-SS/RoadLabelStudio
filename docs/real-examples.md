@@ -2,13 +2,13 @@
 
 [返回首页](../README.md) · [样例标注 JSON](real-examples.json) · [图片署名](images/real/ATTRIBUTION.md)
 
-样例来自 RoadSens-4M 视频。类别分数为项目 v4 初版直接观测记录，供人工复核；每类独立取值 `0–1`，不作为校准概率或数据集官方真值。
+裂缝样例来自 Cracks and Potholes in Road Images，展示开口明显的纵向裂缝。其余样例来自 RoadSens-4M 视频，分数为项目 v4 初版观测记录，各类独立取值 `0–1`，供人工复核。
 
 ## 样例说明
 
-| 样例 | 原始帧／时间 | 主要分数 | 复核重点 |
+| 样例 | 来源定位 | 标注信息 | 复核重点 |
 | --- | --- | --- | --- |
-| [裂缝](images/real/cracks-net.jpg) | S095 · 帧 790 · 26.327 秒 | 裂缝 0.99 | 检查连续交织的网状裂纹及路面块状分隔 |
+| [裂缝](images/real/cracks-open.jpg) | 原图 `918387_RS_290_290RS294095_25385.jpg` | 数据集附裂缝掩膜 | 检查纵向开口、破裂边缘与细小分叉 |
 | [铺装破损](images/real/breakage.jpg) | S060 · 帧 215 · 7.165 秒 | 剥落／破损 0.99，散料 0.90 | 检查材料缺失与破碎边缘，分别判断伴随异常 |
 | [积水](images/real/water.jpg) | S034 · 帧 91 · 3.033 秒 | 积水 0.95 | 确认水面，坑洞判断另查可见证据 |
 | [正常对照](images/real/normal.jpg) | S059 · 帧 163 · 5.432 秒 | 正常 0.90 | 标线和阴影不计异常 |
@@ -34,6 +34,6 @@
 
 ## 来源与数据
 
-[样例 JSON](real-examples.json) 包含九类分数、原始备注、帧号、时间和裁切信息。分数继承自原复核视野，公开图片为道路区域裁切。
+[样例 JSON](real-examples.json) 记录来源和裁切信息；视频样例另含九类分数、原始备注、帧号与时间。裂缝为静态图像示例，不附推理置信度。
 
-图片：Amith Khandakar 等，[RoadSens-4M Dataset v3](https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3)，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。完整署名与处理方式见 [ATTRIBUTION.md](images/real/ATTRIBUTION.md)。
+裂缝：Bianka T. Passos 等，[Cracks and Potholes in Road Images v4](https://data.mendeley.com/datasets/t576ydh9v8/4)；其余图片：Amith Khandakar 等，[RoadSens-4M Dataset v3](https://figshare.com/articles/dataset/RoadSens-4M_Dataset/30341143/3)，[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。完整署名与处理方式见 [ATTRIBUTION.md](images/real/ATTRIBUTION.md)。
