@@ -179,3 +179,160 @@ def test_worker_persists_partial_failure_without_overwriting_review(client,monke
     assert store.video('v')['active_run']=='original'
     partial=client.get('/api/videos/v/observations',params={'run_id':job_id}).json()[0]
     assert partial['ai_scores']['crack']==.8 and partial['scores']['normal']==.9
+
+
+def test_semantic_conflict_retries_with_specific_feedback():
+    invalid={'scores':dict.fromkeys(KEYS,0)|{'normal':.5,'unclear_visibility':.5},'note':'无法确定'}
+    valid={'scores':dict.fromkeys(KEYS,0)|{'normal':.1,'unclear_visibility':.8},'note':'细节不清楚'}
+    requests=[];retries=[]
+    def respond(request):
+        requests.append(json.loads(request.content))
+        result=invalid if len(requests)==1 else valid
+        return httpx.Response(200,json={'choices':[{'message':{'content':'```json\n'+json.dumps(result)+'\n```'}}]})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as c:
+        prediction=infer(c,{'model':'vision','url':'https://example.test/v1','key':''},'rules',b'JPEG',KEYS[:7],lambda:retries.append(1))
+    assert len(requests)==2 and retries==[1]
+    assert '正常不能' in requests[1]['messages'][0]['content'][0]['text']
+    assert prediction.scores==valid['scores']
+
+
+def test_invalid_output_has_bounded_retries_and_no_fallback():
+    from studio.worker import ModelOutputError
+    requests=[]
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200,json={'choices':[{'message':{'content':'{"scores": {"normal": 1}}'}}]})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as c:
+        with pytest.raises(ModelOutputError,match='3 次尝试'):
+            infer(c,{'model':'vision','url':'https://example.test/v1','key':''},'rules',b'JPEG')
+    assert len(requests)==3
+
+
+def test_malformed_api_response_retries_without_losing_original_failure():
+    from studio.worker import ModelOutputError
+    calls=[]
+    def respond(request):
+        calls.append(1)
+        return httpx.Response(200,json={'choices':[]})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as c:
+        with pytest.raises(ModelOutputError,match='接口响应缺少有效的标注内容'):
+            infer(c,{'model':'vision','url':'https://example.test/v1','key':''},'rules',b'JPEG')
+    assert len(calls)==3
+
+
+def test_disabled_category_retries_instead_of_dropping_score():
+    invalid={'scores':dict.fromkeys(KEYS,0)|{'water':.8},'note':'water'}
+    valid={'scores':dict.fromkeys(KEYS,0)|{'crack':.8},'note':'fissure'}
+    requests=[]
+    def respond(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200,json={'choices':[{'message':{'content':json.dumps(invalid if len(requests)==1 else valid)}}]})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as c:
+        result=infer(c,{'model':'vision','url':'https://example.test/v1','key':''},'rules',b'JPEG',['crack'])
+    assert len(requests)==2 and result.scores==valid['scores']
+    assert '未启用的异常类别' in requests[1]['messages'][0]['content'][0]['text']
+
+
+def test_cancel_during_validation_retry_does_not_send_another_request():
+    from studio.worker import InferenceCancelled
+    calls=[];stopped=[]
+    def respond(request):
+        calls.append(1)
+        return httpx.Response(200,json={'choices':[{'message':{'content':'bad output'}}]})
+    with httpx.Client(transport=httpx.MockTransport(respond)) as c:
+        with pytest.raises(InferenceCancelled):
+            infer(c,{'model':'vision','url':'https://example.test/v1','key':''},'rules',b'JPEG',KEYS[:7],lambda:stopped.append(1),lambda:bool(stopped))
+    assert calls==[1]
+
+
+def test_resume_only_processes_missing_frames_and_keeps_review(client,monkeypatch,tmp_path):
+    from studio import worker as module
+    from studio.worker import Worker
+    monkeypatch.setenv('QWEN_BASE_URL','http://127.0.0.1:9999/v1')
+    image=tmp_path/'frame.jpg';image.write_bytes(b'test-image')
+    indices=[]
+    monkeypatch.setattr(module,'frame',lambda store,video,index:(indices.append(index) or image))
+    monkeypatch.setattr(module,'infer',lambda *args:Scores(scores=dict.fromkeys(KEYS,0)|{'crack':.8},note='new result'))
+    client.put('/api/videos/v/frames/0/review',json=payload(),headers=HEADERS)
+    r=client.post('/api/videos/v/jobs',json={'provider':'qwen','sampling':'every_frame','skill_ids':['crack']},headers=HEADERS)
+    job_id=r.json()['id'];store=client.app.state.store
+    with store.db() as db:
+        frozen=db.execute('SELECT config FROM jobs WHERE id=?',(job_id,)).fetchone()[0]
+        db.execute("UPDATE jobs SET status='failed',done=1,error='interrupted' WHERE id=?",(job_id,))
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?)',(job_id,0,encode(dict.fromkeys(KEYS,0)|{'crack':.7}),'saved before failure','model_observed'))
+    assert client.post('/api/jobs/'+job_id+'/resume').status_code==403
+    resumed=client.post('/api/jobs/'+job_id+'/resume',headers=HEADERS)
+    assert resumed.status_code==200 and resumed.json()['saved']==1 and resumed.json()['remaining']==4
+    assert client.post('/api/jobs/'+job_id+'/resume',headers=HEADERS).status_code==409
+    with store.db() as db:
+        row=dict(db.execute('SELECT * FROM jobs WHERE id=?',(job_id,)).fetchone())
+        assert row['config']==frozen
+        db.execute("UPDATE jobs SET status='running' WHERE id=?",(job_id,))
+    Worker(store).run(row)
+    assert indices==[1,2,3,4]
+    with store.db() as db:
+        assert tuple(db.execute('SELECT status,done FROM jobs WHERE id=?',(job_id,)).fetchone())==('completed',5)
+        assert db.execute('SELECT note FROM observations WHERE run_id=? AND frame_index=0',(job_id,)).fetchone()[0]=='saved before failure'
+    assert store.video('v')['active_run']==job_id
+    first=client.get('/api/videos/v/observations').json()[0]
+    assert first['scores']['normal']==.9 and first['ai_scores']['crack']==.7
+    assert client.post('/api/jobs/'+job_id+'/resume',headers=HEADERS).status_code==409
+    assert client.post('/api/jobs/original/resume',headers=HEADERS).status_code==409
+
+
+def test_resume_refuses_conflicting_job_and_preserves_partial_results(client,monkeypatch):
+    monkeypatch.setenv('QWEN_BASE_URL','http://127.0.0.1:9999/v1')
+    request={'provider':'qwen','skill_ids':['crack']}
+    old=client.post('/api/videos/v/jobs',json=request,headers=HEADERS).json()['id']
+    with client.app.state.store.db() as db:
+        db.execute("UPDATE jobs SET status='failed',error='original issue' WHERE id=?",(old,))
+    assert client.post('/api/videos/v/jobs',json=request,headers=HEADERS).status_code==200
+    assert client.post('/api/jobs/'+old+'/resume',headers=HEADERS).status_code==409
+    with client.app.state.store.db() as db:
+        assert tuple(db.execute('SELECT status,error FROM jobs WHERE id=?',(old,)).fetchone())==('failed','original issue')
+    assert client.post('/api/jobs/missing/resume',headers=HEADERS).status_code==404
+
+
+@pytest.mark.parametrize('status',['failed','cancelled','interrupted','completed'])
+def test_delete_job_keeps_video_import_and_human_review(client,monkeypatch,status):
+    monkeypatch.setenv('QWEN_BASE_URL','http://127.0.0.1:9999/v1')
+    job_id=client.post('/api/videos/v/jobs',json={'provider':'qwen','skill_ids':['crack']},headers=HEADERS).json()['id']
+    client.put('/api/videos/v/frames/1/review',json=payload(),headers=HEADERS)
+    store=client.app.state.store
+    with store.db() as db:
+        db.execute('UPDATE jobs SET status=?,done=1 WHERE id=?',(status,job_id))
+        db.execute('INSERT INTO observations VALUES(?,?,?,?,?)',(job_id,0,encode(dict.fromkeys(KEYS,0)|{'crack':.8}),'AI result','model_observed'))
+        if status=='completed':db.execute('UPDATE videos SET active_run=? WHERE id=?',(job_id,'v'))
+        edit=tuple(db.execute('SELECT * FROM edits WHERE video_id=?',('v',)).fetchone())
+    assert client.delete('/api/jobs/'+job_id).status_code==403
+    response=client.delete('/api/jobs/'+job_id,headers=HEADERS)
+    assert response.status_code==200 and response.json()['deleted_observations']==1
+    assert store.video('v')['active_run']=='original'
+    with store.db() as db:
+        assert not db.execute('SELECT id FROM jobs WHERE id=?',(job_id,)).fetchone()
+        assert not db.execute('SELECT * FROM observations WHERE run_id=?',(job_id,)).fetchone()
+        assert db.execute('SELECT count(*) FROM observations WHERE run_id=?',('original',)).fetchone()[0]==1
+        assert tuple(db.execute('SELECT * FROM edits WHERE video_id=?',('v',)).fetchone())==edit
+        assert json.loads(db.execute('SELECT payload FROM audit ORDER BY id DESC LIMIT 1').fetchone()[0])['type']=='job_delete'
+
+
+@pytest.mark.parametrize('status',['queued','running','cancelling'])
+def test_delete_refuses_active_tasks(client,monkeypatch,status):
+    monkeypatch.setenv('QWEN_BASE_URL','http://127.0.0.1:9999/v1')
+    job_id=client.post('/api/videos/v/jobs',json={'provider':'qwen','skill_ids':['crack']},headers=HEADERS).json()['id']
+    with client.app.state.store.db() as db:db.execute('UPDATE jobs SET status=? WHERE id=?',(status,job_id))
+    assert client.delete('/api/jobs/'+job_id,headers=HEADERS).status_code==409
+    with client.app.state.store.db() as db:assert db.execute('SELECT status FROM jobs WHERE id=?',(job_id,)).fetchone()[0]==status
+
+
+def test_delete_protects_import_and_handles_missing_or_last_version(client,monkeypatch):
+    assert client.delete('/api/jobs/original',headers=HEADERS).status_code==409
+    assert client.delete('/api/jobs/missing',headers=HEADERS).status_code==404
+    monkeypatch.setenv('QWEN_BASE_URL','http://127.0.0.1:9999/v1')
+    job_id=client.post('/api/videos/v/jobs',json={'provider':'qwen','skill_ids':['crack']},headers=HEADERS).json()['id']
+    with client.app.state.store.db() as db:
+        db.execute("UPDATE jobs SET status='failed' WHERE id='original'")
+        db.execute("UPDATE jobs SET status='completed' WHERE id=?",(job_id,))
+        db.execute('UPDATE videos SET active_run=? WHERE id=?',(job_id,'v'))
+    assert client.delete('/api/jobs/'+job_id,headers=HEADERS).status_code==200
+    assert client.app.state.store.video('v')['active_run'] is None

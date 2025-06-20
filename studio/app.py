@@ -82,7 +82,7 @@ def create_app(data_dir=None, run_worker=True):
         response.headers['Referrer-Policy'] = 'same-origin'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-        if path.startswith('/api/'):
+        if path == '/' or path.startswith('/api/'):
             response.headers['Cache-Control'] = 'no-store'
         return response
 
@@ -301,6 +301,47 @@ def create_app(data_dir=None, run_worker=True):
         except sqlite3.IntegrityError:
             raise HTTPException(409,'此视频已有任务在运行')
         return {'id':job_id,'total':len(indices)}
+
+    @app.post('/api/jobs/{job_id}/resume')
+    def resume(job_id: str):
+        try:
+            with store.db() as db:
+                db.execute('BEGIN IMMEDIATE')
+                row = db.execute('SELECT * FROM jobs WHERE id=?', (job_id,)).fetchone()
+                if not row:
+                    raise HTTPException(404, '任务不存在')
+                config = json.loads(row['config'])
+                if config.get('provider') == 'import' or row['status'] not in ['failed', 'cancelled', 'interrupted']:
+                    raise HTTPException(409, '仅支持继续失败、已停止或已中断的 AI 任务')
+                provider = providers().get(config.get('provider'))
+                if not provider or not provider['configured']:
+                    raise HTTPException(409, '该模型尚未配置，请先检查模型服务')
+                if not config.get('indices') or not config.get('provider_snapshot'):
+                    raise HTTPException(409, '此历史任务缺少运行配置，请重新创建任务')
+                saved = {r['frame_index'] for r in db.execute('SELECT frame_index FROM observations WHERE run_id=?', (job_id,))}
+                done = len(saved & set(config['indices']))
+                db.execute("UPDATE jobs SET status='queued',error='',stage='',done=?,updated=? WHERE id=?", (done, now(), job_id))
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, '此视频已有任务在运行，请先停止或等待完成')
+        return {'id': job_id, 'saved': done, 'remaining': len(config['indices']) - done}
+
+    @app.delete('/api/jobs/{job_id}')
+    def delete_job(job_id: str):
+        with store.db() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM jobs WHERE id=?', (job_id,)).fetchone()
+            if not row:
+                raise HTTPException(404, '任务不存在')
+            if row['status'] not in ['failed', 'cancelled', 'interrupted', 'completed']:
+                raise HTTPException(409, '请先停止任务，等待停止完成后再删除')
+            if json.loads(row['config']).get('provider') == 'import':
+                raise HTTPException(409, '导入的原始标注不支持从任务列表删除')
+            fallback = db.execute("SELECT id FROM jobs WHERE video_id=? AND id!=? AND status='completed' ORDER BY created DESC,id DESC LIMIT 1", (row['video_id'], job_id)).fetchone()
+            db.execute('UPDATE videos SET active_run=? WHERE id=? AND active_run=?', (fallback['id'] if fallback else None, row['video_id'], job_id))
+            deleted = db.execute('DELETE FROM observations WHERE run_id=?', (job_id,)).rowcount
+            db.execute('DELETE FROM jobs WHERE id=?', (job_id,))
+            db.execute('INSERT INTO audit(video_id,payload,actor,created) VALUES(?,?,?,?)', (row['video_id'], encode({'type':'job_delete','job_id':job_id,'deleted_observations':deleted}), 'team', now()))
+        return {'id':job_id, 'deleted_observations':deleted}
 
     @app.post('/api/jobs/{job_id}/cancel')
     def cancel(job_id: str):

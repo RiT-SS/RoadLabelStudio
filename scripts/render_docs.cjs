@@ -34,6 +34,15 @@ const root = path.resolve(__dirname, '..');
       await page.mouse.move(1430, 5);
       await page.screenshot({path: path.join(output, name + '.png'), fullPage, animations: 'disabled'});
     }
+    if (process.argv.includes('--queue-only')) {
+      await page.locator('nav [data-view="jobs"]').click();
+      await page.locator('.runtime-strip').waitFor();
+      await page.locator('.job-card').first().waitFor();
+      await capture('queue');
+      if (errors.length) throw Error(errors.join('\n'));
+      console.log('Captured task queue using synthetic data. No browser errors.');
+      return;
+    }
     await capture('library');
     await page.locator('[data-video="demo-1"]').click();
     await page.locator('#frame-number').fill('32');
@@ -51,7 +60,7 @@ const root = path.resolve(__dirname, '..');
     await page.locator('.skill-card').first().waitFor();
     await capture('skills');
     await page.locator('nav [data-view="jobs"]').click();
-    await page.locator('.runtime-panel').waitFor();
+    await page.locator('.runtime-strip').waitFor();
     await capture('queue');
     if (errors.length) throw Error(errors.join('\n'));
     console.log('Captured 6 UI views using synthetic data. No browser errors.');
