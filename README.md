@@ -6,7 +6,7 @@
 
 `多模态初标` · `逐帧复核` · `分类 Skills` · `时序区间导出` · `模型按需加载`
 
-[功能展示](#功能展示) · [真实道路样例](#真实道路样例) · [快速开始](#快速开始) · [部署指南](docs/deployment.md)
+[功能展示](#功能展示) · [真实道路样例](#真实道路样例) · [系统架构](#系统架构) · [访问说明](#访问说明)
 
 </div>
 
@@ -78,17 +78,6 @@ RoadLabel Studio 将视频上传、视觉模型初标、人工复核和候选区
 
 **技术栈：** FastAPI · SQLite · FFmpeg · 原生 JavaScript · Qwen2.5-VL
 
-## 快速开始
+## 访问说明
 
-环境：Python 3.11+、FFmpeg／ffprobe。
-
-```bash
-git clone https://github.com/RiT-SS/RoadLabelStudio.git
-cd RoadLabelStudio
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python run.py --port 8780
-```
-
-打开 <http://127.0.0.1:8780/>。模型接入与内网部署见 [部署指南](docs/deployment.md)，界面演示见 [演示说明](docs/demo.md)。
+本项目为校企合作项目，平台需连接项目内网使用，不提供面向外部的在线预览或操作入口。本仓库仅公开部分源代码，供技术交流与参考。
