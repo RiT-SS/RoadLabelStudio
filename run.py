@@ -1,11 +1,16 @@
 """One web process; intranet mode listens on loopback and a specific LAN address."""
 import argparse
+import faulthandler
 import ipaddress
 import os
 import socket
+import signal
 import uvicorn
 
 if __name__ == '__main__':
+    # Support a read-only thread dump without terminating the web service.
+    if hasattr(signal, 'SIGUSR1'):
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8780)
