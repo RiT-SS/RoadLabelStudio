@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import re
 import threading
@@ -8,6 +9,7 @@ import uuid
 import httpx
 from pydantic import ValidationError
 from .domain import CLASSES, KEYS, Scores
+from .model_runtime import CapacityUnavailable
 from .media import frame
 from .storage import encode, now
 
@@ -84,6 +86,13 @@ def infer(client, provider, instruction, image, enabled_keys=None, on_retry=None
         response = client.post(provider['url'].rstrip('/')+'/chat/completions', headers=headers, json=payload)
         if cancelled and cancelled():
             raise InferenceCancelled()
+        if response.status_code == 503:
+            try:
+                if response.json().get('error_code') == 'cuda_oom':
+                    raise CapacityUnavailable('推理显存不足，保留已完成帧后重新排队')
+            except (ValueError, AttributeError) as exc:
+                if isinstance(exc, CapacityUnavailable):
+                    raise
         if response.status_code in [429, 500, 502, 503, 504] and attempt < 2:
             time.sleep(1 + attempt)
             continue
@@ -120,35 +129,100 @@ class Worker:
     def __init__(self, store, runtime=None):
         self.store, self.stop = store, threading.Event()
         self.runtime = runtime
+        self.max_concurrent = max(1, min(8, int(os.getenv('STUDIO_MAX_CONCURRENT_JOBS', '4'))))
         self.thread = None
+        self.tasks = {}
+        self.retry_after = {}
 
     def start(self):
         with self.store.db() as db:
-            db.execute("UPDATE jobs SET status='interrupted', error='服务重启，已有初标已保留；可继续未完成的帧',updated=? WHERE status IN ('running','cancelling')", (now(),))
-        self.thread = threading.Thread(target=self.loop, name='annotation-worker', daemon=True)
+            db.execute("UPDATE jobs SET status='interrupted', stage='', execution='{}', error='服务重启，已有初标已保留；可继续未完成的帧',updated=? WHERE status IN ('running','cancelling')", (now(),))
+        self.thread = threading.Thread(target=self.loop, name='annotation-scheduler', daemon=True)
         self.thread.start()
 
     def close(self):
         self.stop.set()
         if self.thread:
-            self.thread.join(timeout=3)
+            self.thread.join(timeout=10)
+        if self.runtime:
+            self.runtime.close()
+        deadline = time.monotonic() + 5
+        for task, _ in list(self.tasks.values()):
+            task.join(timeout=max(0, deadline-time.monotonic()))
+
+    def _waiting(self, job_id, stage):
+        with self.store.db() as db:
+            db.execute("UPDATE jobs SET stage=?, execution='{}', updated=? WHERE id=? AND status='queued' AND stage!=?", (stage, now(), job_id, stage))
+
+    def dispatch(self):
+        self.tasks = {key:value for key,value in self.tasks.items() if value[0].is_alive()}
+        if self.runtime:
+            self.runtime.maintain()
+        with self.store.db() as db:
+            rows = [dict(r) for r in db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created,id")]
+        for job in rows:
+            if self.stop.is_set():
+                return
+            if job['id'] in self.tasks:
+                continue
+            if len(self.tasks) >= self.max_concurrent:
+                self._waiting(job['id'], 'waiting_slot')
+                continue
+            if self.retry_after.get(job['id'], 0) > time.monotonic():
+                continue
+            config = json.loads(job['config'])
+            managed = config.get('provider') == 'qwen' and self.runtime and self.runtime.enabled
+            lane = 'managed_qwen' if managed else config.get('provider')
+            # External services retain one request stream per provider; local slots are independent.
+            if not managed and any(existing_lane == lane for _, existing_lane in self.tasks.values()):
+                self._waiting(job['id'], 'waiting_slot')
+                continue
+            slot = None
+            try:
+                if managed:
+                    provider = {**providers()['qwen'], **config['provider_snapshot']}
+                    slot, reason = self.runtime.try_acquire(job['id'], provider)
+                    if slot is None:
+                        self._waiting(job['id'], reason)
+                        self.retry_after[job['id']] = time.monotonic() + 10
+                        continue
+                execution = {'gpus':slot.gpus, 'instance_id':slot.id} if slot else {}
+                with self.store.db() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    claimed = db.execute("UPDATE jobs SET status='running', stage=?, execution=?, error='', updated=? WHERE id=? AND status='queued'",
+                                         ('loading_model' if slot else 'analyzing', encode(execution), now(), job['id'])).rowcount
+                if not claimed or self.stop.is_set():
+                    if slot:
+                        self.runtime.release(slot)
+                    continue
+                task = threading.Thread(target=self.run, args=(job, slot), name='annotation-'+job['id'][:8], daemon=True)
+                self.tasks[job['id']] = (task, lane)
+                task.start()
+                self.retry_after.pop(job['id'], None)
+            except Exception as exc:
+                if slot:
+                    self.runtime.release(slot, broken=True)
+                # Do not resurrect a task cancelled during admission.
+                with self.store.db() as db:
+                    db.execute("UPDATE jobs SET status='failed', stage='', error=?, updated=? WHERE id=? AND status IN ('queued','running')",
+                               (str(exc)[:500], now(), job['id']))
 
     def loop(self):
         while not self.stop.is_set():
-            if self.runtime:
-                self.runtime.maintain()
-            with self.store.db() as db:
-                db.execute('BEGIN IMMEDIATE')
-                row = db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY created LIMIT 1").fetchone()
-                if row:
-                    db.execute("UPDATE jobs SET status='running',updated=? WHERE id=?", (now(), row['id']))
-            if row:
-                self.run(dict(row))
-            else:
-                self.stop.wait(.5)
+            try:
+                self.dispatch()
+            except Exception:
+                logging.getLogger(__name__).exception('Task scheduler iteration failed')
+            self.stop.wait(.5)
 
-    def run(self, job):
+    def _cancelled_status(self, job_id):
+        with self.store.db() as db:
+            row = db.execute('SELECT status FROM jobs WHERE id=?', (job_id,)).fetchone()
+        return 'cancelled' if row and row['status'] == 'cancelling' else 'interrupted' if self.stop.is_set() else 'cancelled'
+
+    def run(self, job, slot=None):
         failed_index = None
+        broken = pressure = False
         try:
             config = json.loads(job['config'])
             provider = {**providers()[config['provider']], **config['provider_snapshot']}
@@ -156,8 +230,8 @@ class Worker:
                 raise ValueError('模型尚未配置')
             def cancelled():
                 with self.store.db() as db:
-                    status = db.execute('SELECT status FROM jobs WHERE id=?', (job['id'],)).fetchone()[0]
-                return self.stop.is_set() or status == 'cancelling'
+                    row = db.execute('SELECT status FROM jobs WHERE id=?', (job['id'],)).fetchone()
+                return self.stop.is_set() or not row or row['status'] == 'cancelling'
             def progress(stage):
                 with self.store.db() as db:
                     db.execute('UPDATE jobs SET stage=?,updated=? WHERE id=?', (stage,now(),job['id']))
@@ -165,10 +239,11 @@ class Worker:
                 saved = {r['frame_index'] for r in db.execute('SELECT frame_index FROM observations WHERE run_id=?', (job['id'],))}
                 saved &= set(config['indices'])
                 db.execute('UPDATE jobs SET done=? WHERE id=?', (len(saved), job['id']))
-            if len(saved) < len(config['indices']) and config['provider'] == 'qwen' and self.runtime:
-                if not self.runtime.ensure_ready(provider, cancelled, progress):
-                    self.finish(job['id'], 'cancelled', '已停止，已有结果保留')
-                    return
+            if slot:
+                if not self.runtime.ensure_ready(slot, cancelled, progress):
+                    raise InferenceCancelled()
+                # Route to this leased instance without changing the frozen task configuration.
+                provider = {**provider, 'url':slot.url}
             progress('analyzing')
             video = self.store.video(job['video_id'])
             with httpx.Client(timeout=httpx.Timeout(120, connect=10), follow_redirects=False, trust_env=False) as client:
@@ -176,11 +251,8 @@ class Worker:
                     if index in saved:
                         continue
                     failed_index = index
-                    with self.store.db() as db:
-                        status = db.execute('SELECT status FROM jobs WHERE id=?', (job['id'],)).fetchone()[0]
-                    if self.stop.is_set() or status == 'cancelling':
-                        self.finish(job['id'], 'cancelled', '已停止，部分结果保留在本次任务中')
-                        return
+                    if cancelled():
+                        raise InferenceCancelled()
                     image = frame(self.store, video, index).read_bytes()
                     prediction = infer(client, provider, config['prompt'], image, config['skill_ids'],
                                        lambda: progress('correcting_output'), cancelled)
@@ -190,20 +262,39 @@ class Worker:
                     with self.store.db() as db:
                         db.execute('INSERT INTO observations VALUES(?,?,?,?,?)', (job['id'], index, encode(prediction.scores), prediction.note, 'model_observed'))
                         db.execute('UPDATE jobs SET done=done+1,updated=? WHERE id=?', (now(), job['id']))
+            if cancelled():
+                raise InferenceCancelled()
             with self.store.db() as db:
+                # Check in the same write transaction so stop cannot race completion.
+                db.execute('BEGIN IMMEDIATE')
                 status = db.execute('SELECT status FROM jobs WHERE id=?', (job['id'],)).fetchone()[0]
                 if status == 'cancelling':
-                    db.execute("UPDATE jobs SET status='cancelled',updated=? WHERE id=?", (now(), job['id']))
+                    db.execute("UPDATE jobs SET status='cancelled',stage='',updated=? WHERE id=?", (now(), job['id']))
                 else:
                     db.execute("UPDATE jobs SET status='completed',stage='',updated=? WHERE id=?", (now(), job['id']))
                     db.execute('UPDATE videos SET active_run=? WHERE id=?', (job['id'], job['video_id']))
+        except CapacityUnavailable as exc:
+            broken = pressure = True
+            with self.store.db() as db:
+                db.execute('BEGIN IMMEDIATE')
+                status = db.execute('SELECT status FROM jobs WHERE id=?', (job['id'],)).fetchone()[0]
+                status = 'cancelled' if status == 'cancelling' else 'interrupted' if self.stop.is_set() else 'queued'
+                db.execute("UPDATE jobs SET status=?,stage=?,execution='{}',error=?,updated=? WHERE id=?",
+                           (status, 'waiting_resources' if status == 'queued' else '', str(exc), now(), job['id']))
         except InferenceCancelled:
-            self.finish(job['id'], 'cancelled', '已停止，已有结果保留，可继续未完成的帧')
+            self.finish(job['id'], self._cancelled_status(job['id']), '已停止，已有结果保留，可继续未完成的帧')
         except Exception as exc:
-            message = str(exc) if isinstance(exc, ValueError) else '任务失败：'+type(exc).__name__+'；请检查解码器或模型服务后重试'
-            if failed_index is not None:
-                message = f'第 {failed_index} 帧：' + message
-            self.finish(job['id'], 'failed', message[:500])
+            broken = slot is not None and not isinstance(exc, ModelOutputError)
+            if self.stop.is_set():
+                self.finish(job['id'], self._cancelled_status(job['id']), '服务重启，已保存的进度保留')
+            else:
+                message = str(exc) if isinstance(exc, ValueError) else '任务失败：'+type(exc).__name__+'；请检查解码器或模型服务后重试'
+                if failed_index is not None:
+                    message = f'第 {failed_index} 帧：' + message
+                self.finish(job['id'], 'failed', message[:500])
+        finally:
+            if slot:
+                self.runtime.release(slot, broken=broken, pressure=pressure)
 
     def finish(self, job_id, status, error=''):
         with self.store.db() as db:

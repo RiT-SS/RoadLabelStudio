@@ -11,6 +11,7 @@ import os
 import threading
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -91,10 +92,13 @@ def main():
         if not images:
             raise HTTPException(400,'Missing image')
         with lock,torch.inference_mode():
-            rendered=processor.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
-            inputs=processor(text=[rendered],images=images,return_tensors='pt',padding=True).to('cuda:0')
-            generated=model.generate(**inputs,max_new_tokens=payload.max_tokens,do_sample=False)
-            text=processor.batch_decode(generated[:,inputs.input_ids.shape[1]:],skip_special_tokens=True,clean_up_tokenization_spaces=False)[0]
+            try:
+                rendered=processor.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
+                inputs=processor(text=[rendered],images=images,return_tensors='pt',padding=True).to('cuda:0')
+                generated=model.generate(**inputs,max_new_tokens=payload.max_tokens,do_sample=False)
+                text=processor.batch_decode(generated[:,inputs.input_ids.shape[1]:],skip_special_tokens=True,clean_up_tokenization_spaces=False)[0]
+            except torch.cuda.OutOfMemoryError:
+                return JSONResponse({'error_code':'cuda_oom'}, status_code=503)
         return {'model':args.model_name,'choices':[{'index':0,'message':{'role':'assistant','content':text},'finish_reason':'stop'}]}
 
     uvicorn.run(app,host=args.host,port=args.port,proxy_headers=False)

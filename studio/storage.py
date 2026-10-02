@@ -35,6 +35,8 @@ class Store:
             ''')
             if 'stage' not in {row['name'] for row in db.execute('PRAGMA table_info(jobs)')}:
                 db.execute("ALTER TABLE jobs ADD COLUMN stage TEXT NOT NULL DEFAULT ''")
+            if 'execution' not in {row['name'] for row in db.execute('PRAGMA table_info(jobs)')}:
+                db.execute("ALTER TABLE jobs ADD COLUMN execution TEXT NOT NULL DEFAULT '{}'")
             for key, rule in zip(KEYS[:7], RULES):
                 db.execute('INSERT OR IGNORE INTO skills VALUES(?,?,?,?,?)', (key, CLASSES[key], rule, 1, 1))
 

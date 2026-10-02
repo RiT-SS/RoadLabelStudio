@@ -158,7 +158,7 @@ def create_app(data_dir=None, run_worker=True):
 
     @app.get('/api/model-runtime')
     def model_runtime():
-        return runtime.snapshot()
+        return {**runtime.snapshot(), 'max_concurrent_jobs':worker.max_concurrent}
 
     @app.get('/api/bootstrap')
     def bootstrap():
@@ -277,7 +277,7 @@ def create_app(data_dir=None, run_worker=True):
     def jobs():
         with store.db() as db:
             rows = db.execute('SELECT j.*,v.name AS video_name FROM jobs j JOIN videos v ON v.id=j.video_id ORDER BY j.created DESC LIMIT 300').fetchall()
-        return [{**{k:v for k,v in dict(row).items() if k != 'config'}, 'config':{k:v for k,v in json.loads(row['config']).items() if k not in ['indices','prompt','provider_snapshot']}} for row in rows]
+        return [{**{k:v for k,v in dict(row).items() if k not in ['config','execution']}, 'execution':json.loads(row['execution']), 'config':{k:v for k,v in json.loads(row['config']).items() if k not in ['indices','prompt','provider_snapshot']}} for row in rows]
 
     @app.post('/api/videos/{video_id}/jobs')
     def create_job(video_id: str, payload: JobRequest):
@@ -320,7 +320,7 @@ def create_app(data_dir=None, run_worker=True):
                     raise HTTPException(409, '此历史任务缺少运行配置，请重新创建任务')
                 saved = {r['frame_index'] for r in db.execute('SELECT frame_index FROM observations WHERE run_id=?', (job_id,))}
                 done = len(saved & set(config['indices']))
-                db.execute("UPDATE jobs SET status='queued',error='',stage='',done=?,updated=? WHERE id=?", (done, now(), job_id))
+                db.execute("UPDATE jobs SET status='queued',error='',stage='',execution='{}',done=?,updated=? WHERE id=?", (done, now(), job_id))
         except sqlite3.IntegrityError:
             raise HTTPException(409, '此视频已有任务在运行，请先停止或等待完成')
         return {'id': job_id, 'saved': done, 'remaining': len(config['indices']) - done}

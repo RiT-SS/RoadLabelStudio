@@ -270,3 +270,5 @@ progress{accent-color:var(--green);width:100%;height:6px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
 
 .job-card-actions .job-delete{color:#a84b42}.job-card-actions .job-delete:hover{background:#fff2ef;border-color:#edc5bd}
+
+.runtime-instances{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.instance-chip,.job-gpu{display:inline-block;background:#edf5f2;color:#27715f;border-radius:5px;padding:3px 7px;font-size:10px}.job-gpu{margin-left:8px}

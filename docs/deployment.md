@@ -68,6 +68,8 @@ export QWEN_AUTO_MANAGE=1
 export QWEN_IDLE_SECONDS=600
 export STUDIO_PRESENCE_SECONDS=90
 export QWEN_GPU_IDS=auto
+export QWEN_MAX_INSTANCES=4
+export STUDIO_MAX_CONCURRENT_JOBS=4
 export QWEN_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 ```
 
@@ -75,9 +77,11 @@ export QWEN_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32
 
 只有 Qwen 标注任务触发加载，登录网站不会加载模型。自动调度优先选择空闲显存至少 10 GiB 的单卡，否则尝试空闲显存至少 5.5 / 4.5 GiB 的两卡。此预算针对当前 3B FP16 桥接，不能作为其他模型的显存保证。也可用 `QWEN_GPU_IDS=0,3` 限定允许使用的卡。
 
-无 Qwen 任务时默认空闲 600 秒释放；无人在线且无待处理任务时提前释放。退出登录不会中止已提交任务。关闭页面后最迟按 90 秒心跳超时确认离线。仅管理本平台启动的模型子进程，不接管其他 GPU 任务。
+默认最多同时执行 4 个任务、保有 4 个本地模型实例，实际并行数由可用显存决定。同一 GPU 不会分配给本平台的多个实例；双卡模型占用两张卡。分配时预留 GPU，加载前再次检查显存；复用实例也检查推理余量。显存不足的任务保持排队，每 10 秒重新尝试；加载或推理出现显存不足时保留已完成帧、释放该实例并重新排队。GPU 按剩余显存排序，不按算力利用率排序，也无法预留其他进程的显存。
 
-模型状态和日志分别位于 `data/qwen_server.json`、`data/qwen.log`。桥接是串行推理服务，AI 输出应经过人工复核。
+各实例分别计时，空闲 600 秒释放；无人在线且无待处理任务时提前释放。退出登录不会中止已提交任务。关闭页面后最迟按 90 秒心跳超时确认离线。仅管理本平台启动的模型子进程，不接管其他 GPU 任务。
+
+模型状态位于 `data/qwen_server.json`，每个实例的日志分别位于 `data/qwen-实例编号.log`。每个实例使用独立回环端口（从配置的端口开始寻找空闲端口），每个实例内部逐帧处理，多个实例可同时推理。外部 Qwen／DeepSeek 接口仍按每种服务一条请求流执行，且计入总任务上限。AI 输出应经过人工复核。
 
 ## 项目结构
 
