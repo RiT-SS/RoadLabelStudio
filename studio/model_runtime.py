@@ -1,4 +1,4 @@
-"""Reserve GPUs atomically and own independent, on-demand Qwen processes."""
+"""Admit on-demand Qwen processes by free memory, including shared GPUs."""
 from dataclasses import dataclass
 import json
 import os
@@ -123,6 +123,33 @@ class ModelRuntime:
         free = {r['uuid']:r['free_mib'] for r in inventory}
         return all(free.get(row['uuid'], 0) >= (2048 if i == 0 else 1024) for i, row in enumerate(slot.rows))
 
+    def _probe_capacity(self):
+        # Record readiness BEFORE probing: a model may finish loading while nvidia-smi
+        # runs. Its allocations may be missing from that sample, so do not share yet.
+        with self.lock:
+            ready_ids = {s.id for s in self.slots.values() if s.status == 'ready'}
+        return self._gpu_rows(), ready_ids
+
+    def _capacity_rows(self, inventory, ready_ids, exclude=None):
+        """Called under lock. Free VRAM already excludes resident model weights."""
+        rows = {r['uuid']:dict(r) for r in inventory}
+        for slot in self.slots.values():
+            if slot is exclude:
+                continue
+            for i, device in enumerate(slot.rows):
+                row = rows.get(device['uuid'])
+                if row is None:
+                    continue
+                if slot.status != 'ready' or slot.id not in ready_ids:
+                    # Serialize loading/unloading on each GPU. Atomic reservations
+                    # block new loads even before the child allocates any VRAM.
+                    row['free_mib'] = 0
+                else:
+                    # Keep activation headroom for EVERY warm instance, including
+                    # idle ones that can be assigned another task at any moment.
+                    row['free_mib'] = max(0, row['free_mib'] - (2048 if i == 0 else 1024))
+        return list(rows.values())
+
     def _available_port(self):
         used = {s.port for s in self.slots.values()}
         for port in range(self.port, min(65536, self.port + 32)):
@@ -141,7 +168,7 @@ class ModelRuntime:
             raise ValueError('任务模型配置与当前服务不一致，请重新创建任务')
         # The actual free memory is probed before every admission, including reuse.
         try:
-            inventory = self._gpu_rows()
+            inventory, ready_ids = self._probe_capacity()
         except (OSError, ValueError, subprocess.SubprocessError):
             return None, 'waiting_resources'
         with self.lock:
@@ -150,17 +177,17 @@ class ModelRuntime:
             for slot in self.slots.values():
                 if slot.job_id == job_id:
                     return slot, ''
-                if (slot.job_id is None and slot.status == 'ready' and slot.process is not None
-                        and slot.process.poll() is None and self._headroom(slot, inventory)):
+                if (slot.job_id is None and slot.status == 'ready' and slot.id in ready_ids
+                        and slot.process is not None and slot.process.poll() is None
+                        and self._headroom(slot, self._capacity_rows(inventory, ready_ids, exclude=slot))):
                     slot.job_id, slot.idle_since = job_id, None
                     self._persist()
                     return slot, ''
             if len(self.slots) >= self.max_instances:
                 return None, 'waiting_slot'
-            # Reservation includes loading and idle instances, even before CUDA allocates.
-            reserved = {r['uuid'] for s in self.slots.values() for r in s.rows}
-            rows, budget = choose_gpus([r for r in inventory if r['uuid'] not in reserved
-                                       and self.cooldown.get(r['uuid'], 0) <= time.monotonic()])
+            available = self._capacity_rows(inventory, ready_ids)
+            rows, budget = choose_gpus([r for r in available
+                                       if self.cooldown.get(r['uuid'], 0) <= time.monotonic()])
             if not rows:
                 return None, 'waiting_resources'
             slot = ModelSlot(uuid.uuid4().hex, self._available_port(), rows, budget, job_id)
@@ -170,13 +197,14 @@ class ModelRuntime:
 
     def _launch(self, slot):
         # Recheck after admission: other users may allocate memory in the meantime.
-        rows = {r['uuid']:r for r in self._gpu_rows()}
-        requirements = [10240] if len(slot.rows) == 1 else [5632, 4608]
-        if any(rows.get(r['uuid'], {}).get('free_mib', 0) < minimum for r, minimum in zip(slot.rows, requirements)):
-            raise CapacityUnavailable('启动前显存发生变化，任务继续等待')
+        inventory, ready_ids = self._probe_capacity()
         with self.lock:
             if self.stop.is_set() or self.slots.get(slot.id) is not slot or slot.status != 'reserved':
                 return
+            rows = {r['uuid']:r for r in self._capacity_rows(inventory, ready_ids, exclude=slot)}
+            requirements = [10240] if len(slot.rows) == 1 else [5632, 4608]
+            if any(rows.get(r['uuid'], {}).get('free_mib', 0) < minimum for r, minimum in zip(slot.rows, requirements)):
+                raise CapacityUnavailable('启动前显存发生变化，任务继续等待')
             with socket.socket() as probe:
                 try:
                     probe.bind(('127.0.0.1', slot.port))

@@ -94,6 +94,91 @@ def test_configured_instance_limit(runtime):
     assert runtime.try_acquire('second',provider(runtime))==(None,'waiting_slot')
 
 
+def test_same_gpu_accepts_second_instance_only_after_first_loads(runtime, monkeypatch):
+    inventory = rows(24576)
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: inventory)
+    first = acquire(runtime, 'one')
+    assert runtime.try_acquire('two', provider(runtime)) == (None, 'waiting_resources')
+    ready(first)
+    inventory[0]['free_mib'] -= 7168  # Simulated resident weights, not a measured peak.
+    second = acquire(runtime, 'two')
+    assert first.gpus == second.gpus == [0]
+    assert first.port != second.port and first.id != second.id
+    ready(second)
+    inventory[0]['free_mib'] -= 7168
+    assert runtime.try_acquire('three', provider(runtime)) == (None, 'waiting_resources')
+    runtime.discard(first)
+    assert not second.process.stopped and second.id in runtime.slots
+
+
+def test_shared_gpu_reserves_headroom_for_existing_busy_and_idle_models(runtime, monkeypatch):
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(24576))
+    first = ready(acquire(runtime, 'one'))
+    # 11 GiB is enough for a new model in isolation, but not with 2 GiB
+    # reserved for the existing model's next inference.
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(11264))
+    assert runtime.try_acquire('two', provider(runtime)) == (None, 'waiting_resources')
+    runtime.release(first)
+    assert acquire(runtime, 'two') is first
+    # A third task needs its own instance and must still wait.
+    assert runtime.try_acquire('three', provider(runtime)) == (None, 'waiting_resources')
+
+
+def test_reusing_shared_gpu_instances_does_not_double_spend_headroom(runtime, monkeypatch):
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(24576))
+    first = ready(acquire(runtime, 'one'))
+    second = ready(acquire(runtime, 'two'))
+    runtime.release(second)
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(3072))
+    assert runtime.try_acquire('three', provider(runtime)) == (None, 'waiting_resources')
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(4096))
+    assert acquire(runtime, 'three') is second
+    assert first.job_id == 'one'
+
+
+def test_ready_transition_during_memory_probe_waits_for_fresh_sample(runtime, monkeypatch):
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(24576))
+    first = acquire(runtime, 'one')
+    def sample_before_allocations():
+        ready(first)
+        return rows(24576)
+    monkeypatch.setattr(runtime, '_gpu_rows', sample_before_allocations)
+    assert runtime.try_acquire('two', provider(runtime)) == (None, 'waiting_resources')
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(17408))
+    assert acquire(runtime, 'two').gpus == first.gpus
+
+
+def test_competing_callers_can_only_reserve_one_more_load_on_shared_gpu(runtime, monkeypatch):
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(24576))
+    first = ready(acquire(runtime, 'one'))
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(17408))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda n: runtime.try_acquire(str(n), provider(runtime)), range(8)))
+    admitted = [slot for slot, _ in results if slot]
+    assert len(admitted) == 1 and admitted[0].gpus == first.gpus
+
+
+def test_shared_gpu_launch_rechecks_other_models_headroom(runtime, monkeypatch):
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(24576))
+    first = ready(acquire(runtime, 'one'))
+    second = acquire(runtime, 'two')
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(11264))
+    monkeypatch.setattr('studio.model_runtime.subprocess.Popen', lambda *a, **k: pytest.fail('Do not spend another model’s headroom'))
+    with pytest.raises(CapacityUnavailable):
+        runtime.ensure_ready(second, lambda: False, lambda _: None)
+    assert list(runtime.slots) == [first.id] and not first.process.stopped
+
+
+def test_two_gpu_model_can_share_devices_but_reserves_both_headrooms(runtime, monkeypatch):
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(6500,5500))
+    first = ready(acquire(runtime, 'one'))
+    # The probe already excludes resident weights; neither GPU has 10 GiB.
+    monkeypatch.setattr(runtime, '_gpu_rows', lambda: rows(9000,8000))
+    second = acquire(runtime, 'two')
+    assert first.gpus == [0,1] and second.gpus == [1,0]
+    assert runtime.try_acquire('three', provider(runtime)) == (None, 'waiting_resources')
+
+
 def test_memory_is_checked_again_before_process_launch(runtime,monkeypatch):
     slot=acquire(runtime)
     monkeypatch.setattr(runtime,'_gpu_rows',lambda:rows(1000,14000))

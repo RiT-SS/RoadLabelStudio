@@ -84,6 +84,44 @@ def test_oom_preserves_frames_and_returns_only_affected_job_to_queue(setup,monke
     assert runtime.cooldown
 
 
+def test_two_jobs_infer_concurrently_on_one_gpu_with_separate_instances(setup, monkeypatch):
+    store, runtime, worker, inventory = setup
+    inventory[:] = [dict(index=0, uuid='GPU-0', free_mib=24576)]
+    gate = threading.Event()
+    entered = []
+    def load(slot, cancelled, progress):
+        with runtime.lock:
+            inventory[0]['free_mib'] -= 7168
+            slot.status = 'ready'
+        return True
+    def prediction(client, provider, *args):
+        entered.append(provider['url'])
+        assert gate.wait(4)
+        return Scores(scores=dict.fromkeys(KEYS, 0) | {'crack': .9})
+    monkeypatch.setattr(runtime, 'ensure_ready', load)
+    monkeypatch.setattr('studio.worker.infer', prediction)
+    try:
+        worker.dispatch()
+        wait_for(lambda: len(entered) >= 1)
+        worker.retry_after.clear()
+        worker.dispatch()
+        wait_for(lambda: len(entered) >= 2)
+        assert len(set(entered)) == 2
+        with store.db() as db:
+            execution = [json.loads(r[0]) for r in db.execute("SELECT execution FROM jobs WHERE status='running'")]
+            assert len(execution) == 2 and all(e['gpus'] == [0] for e in execution)
+            assert len({e['instance_id'] for e in execution}) == 2
+            assert tuple(db.execute("SELECT status,stage FROM jobs WHERE id='j2'").fetchone()) == ('queued', 'waiting_resources')
+            db.execute("UPDATE jobs SET status='cancelling' WHERE id='j0'")
+        gate.set()
+        wait_for(lambda: all(not t.is_alive() for t, _ in worker.tasks.values()))
+        with store.db() as db:
+            assert tuple(db.execute("SELECT status,done FROM jobs WHERE id='j0'").fetchone()) == ('cancelled', 0)
+            assert tuple(db.execute("SELECT status,done FROM jobs WHERE id='j1'").fetchone()) == ('completed', 2)
+    finally:
+        gate.set()
+
+
 def test_total_concurrency_limit_keeps_extra_job_queued(setup,monkeypatch):
     store,runtime,worker,_=setup;worker.max_concurrent=1;gate=threading.Event();entered=threading.Event()
     def prediction(*args):
