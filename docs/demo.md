@@ -6,7 +6,7 @@
 
 真实道路裁切图片及早期复核截图位于 `docs/images/real/`，来源与标注流程见 [真实样例说明](real-examples.md)。本演示脚本不会生成或覆盖这些真实样例。
 
-README 的“样例图”位于 `docs/images/screenshots/`，为平台实际页面的脱敏截图，展示视频库、逐帧复核与任务队列；其中道路画面来自 RoadSens-4M，来源见 [署名说明](images/real/ATTRIBUTION.md)。
+README 的“样例图”位于 `docs/images/screenshots/`，为平台实际页面的脱敏截图，展示视频库、逐帧复核、候选片段筛选与任务队列；其中道路画面来自 RoadSens-4M，来源见 [署名说明](images/real/ATTRIBUTION.md)。
 
 运行演示：
 

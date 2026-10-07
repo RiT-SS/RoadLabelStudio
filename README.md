@@ -36,6 +36,10 @@ RoadLabel Studio 将视频上传、视觉模型初标、人工复核和候选区
 
 ![标注工作台：视频画面、逐帧分类分数与人工复核](docs/images/screenshots/annotation-workbench.png)
 
+**候选片段筛选** · 按类别、置信度阈值与连接间隔预览候选区间。
+
+![候选片段筛选：异常时间轴、筛选参数与候选区间](docs/images/screenshots/candidate-filtering.png)
+
 **任务队列** · 查看分析进度与模型状态，继续未完成的标注任务。
 
 ![任务队列：模型状态、已保存进度与任务管理](docs/images/screenshots/task-queue.png)
